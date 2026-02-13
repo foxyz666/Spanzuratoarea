@@ -2,6 +2,7 @@
 <html lang="ro">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Spânzurătoarea Online</title>
   <link rel="stylesheet" href="style.css" />
   <!-- Firebase compat SDK -->
@@ -9,16 +10,28 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
 </head>
 <body>
+  <div class="lang-switch" aria-label="Language switch">
+    <button id="lang-ro" class="lang-btn" title="Română">🇷🇴</button>
+    <button id="lang-ru" class="lang-btn" title="Русский">🇷🇺</button>
+  </div>
+  <div class="quick-tools" aria-label="Quick tools">
+    <button id="auth-open-btn" class="icon-btn" title="Cont">👤</button>
+    <button id="chat-toggle-btn" class="icon-btn" title="Chat">
+      💬
+      <span id="chat-unread-badge" class="chat-unread-badge hidden">+0</span>
+    </button>
+  </div>
+
   <div class="app">
-    <h1>Spânzurătoarea Online</h1>
+    <h1 id="app-title">Spânzurătoarea Online</h1>
 
     <!-- Ecran Party -->
     <section id="party-screen" class="screen active">
-      <h2>Party Online</h2>
+      <h2 id="party-title">Party Online</h2>
 
       <div class="name-input">
         <label>
-          Numele tău:
+          <span id="name-label">Numele tău:</span>
           <input id="player-name-input" type="text" placeholder="ex: Alex" />
         </label>
       </div>
@@ -31,15 +44,15 @@
       <p id="online-players-live" class="message">Online acum: 0 jucători</p>
 
       <div id="online-search-panel" class="panel hidden">
-        <p><strong>Matchmaking Online</strong></p>
+        <p><strong id="match-title">Matchmaking Online</strong></p>
         <p id="online-search-status">Căutăm un jucător disponibil...</p>
         <button id="cancel-search-btn" class="secondary">Cancel Search</button>
       </div>
 
       <!-- Host: după Create Party -->
       <div id="create-party-panel" class="panel hidden">
-        <p><strong>Lobby Party</strong></p>
-        <p>Party creat! Codul tău este:</p>
+        <p><strong id="lobby-title">Lobby Party</strong></p>
+        <p id="lobby-code-text">Party creat! Codul tău este:</p>
         <div class="party-code-box">
           <span id="party-code-display"></span>
           <button id="copy-code-btn" class="small-btn">Copy</button>
@@ -49,12 +62,12 @@
         <p id="slot-player-2">Persoana 2: waiting...</p>
         <p id="lobby-round-info" class="message"></p>
 
-        <p><strong>Cine este în party:</strong></p>
+        <p><strong id="who-party-text">Cine este în party:</strong></p>
         <ul id="party-players-list"></ul>
 
         <div class="host-controls">
           <label>
-            Cuvântul / expresia (ascunsă pentru ceilalți):
+            <span id="secret-label">Cuvântul / expresia (ascunsă pentru ceilalți):</span>
             <input id="secret-word-input" type="password" />
           </label>
           <button id="start-game-btn" class="hidden">Start Game</button>
@@ -63,26 +76,21 @@
 
       <!-- Guest: după Join Party -->
       <div id="join-party-panel" class="panel hidden">
-        <p>Introdu codul primit de la prieten:</p>
+        <p id="join-help">Introdu codul primit de la prieten:</p>
         <input id="join-code-input" type="text" placeholder="ex: ABCD12" />
         <button id="join-code-confirm-btn">Connect</button>
       </div>
 
       <p id="party-status" class="message"></p>
-
-      <div class="panel">
-        <p><strong>Leaderboard Global</strong></p>
-        <ul id="leaderboard-list"></ul>
-      </div>
     </section>
 
     <!-- Ecran Joc -->
     <section id="game-screen" class="screen">
-      <h2>Joc</h2>
-      <p>Party code: <strong id="game-party-code"></strong></p>
+      <h2 id="game-title">Joc</h2>
+      <p><span id="party-code-text">Party code:</span> <strong id="game-party-code"></strong></p>
       <p id="scoreboard" class="scoreboard">Scor: -</p>
 
-      <p>Jucători în party:</p>
+      <p id="players-in-party">Jucători în party:</p>
       <ul id="game-players-list"></ul>
 
       <div class="hangman-box">
@@ -111,19 +119,30 @@
         <span>Greșeli: <strong id="wrong-count">0</strong> / <span id="max-wrong">7</span></span>
       </div>
 
+      <div id="admin-tools" class="panel admin-tools hidden">
+        <p><strong id="admin-tools-title">Unelte Admin</strong></p>
+        <div class="admin-tools-actions">
+          <button id="admin-peek-word-btn" class="secondary">👁 Vezi cuvântul</button>
+          <button id="admin-remove-wrong-btn" class="secondary">🩹 Șterge o greșeală</button>
+        </div>
+      </div>
+
       <div id="word-display" class="word-display"></div>
 
       <div class="controls">
         <div class="guess-input">
-          <label for="letter-input">Ghicitorul: ghicește o literă</label>
+          <label id="guess-label" for="letter-input">Ghicitorul: ghicește o literă</label>
           <input id="letter-input" type="text" maxlength="1" autocomplete="off" />
           <button id="guess-btn">Ghicește</button>
         </div>
         <div id="keyboard" class="keyboard"></div>
       </div>
 
-      <div class="panel chat-panel">
-        <p><strong>Chat Party</strong></p>
+      <div id="chat-window" class="panel chat-panel hidden">
+        <div class="chat-header-row">
+          <p><strong id="chat-title">Chat Party</strong></p>
+          <button id="chat-minimize-btn" class="small-btn secondary" title="Minimizează">−</button>
+        </div>
         <div id="chat-messages" class="chat-messages"></div>
         <div class="chat-input-row">
           <input id="chat-input" type="text" placeholder="Scrie un mesaj..." maxlength="240" />
@@ -136,15 +155,47 @@
   </div>
 
   <footer class="site-footer">
-    <p>Social</p>
-    <div class="social-links">
-      <a id="social-facebook" class="social-icon" href="#" target="_blank" rel="noopener noreferrer" aria-label="Facebook">F</a>
-      <a id="social-instagram" class="social-icon" href="#" target="_blank" rel="noopener noreferrer" aria-label="Instagram">I</a>
-      <a id="social-tiktok" class="social-icon" href="#" target="_blank" rel="noopener noreferrer" aria-label="TikTok">T</a>
-      <a id="social-youtube" class="social-icon" href="#" target="_blank" rel="noopener noreferrer" aria-label="YouTube">Y</a>
-      <a id="social-discord" class="social-icon" href="#" target="_blank" rel="noopener noreferrer" aria-label="Discord">D</a>
-    </div>
+    <p id="credits-text">Aplicația a fost fondată și creată de Foxyz și Hellen. &lt;3</p>
   </footer>
+
+  <div id="auth-modal" class="auth-modal hidden">
+    <div class="auth-card">
+      <div class="auth-header-row">
+        <p><strong id="auth-title">Cont</strong></p>
+        <button id="auth-close-btn" class="small-btn secondary" title="Închide">✕</button>
+      </div>
+      <div class="auth-grid">
+        <input id="auth-username-input" type="text" placeholder="Username" />
+        <input id="auth-password-input" type="password" placeholder="Parolă" />
+      </div>
+      <label class="admin-check-wrap">
+        <input id="auth-admin-checkbox" type="checkbox" />
+        <span id="auth-admin-check-label">Am cod de admin</span>
+      </label>
+      <label id="admin-secret-wrap" class="admin-secret-wrap hidden">
+        <span id="admin-secret-label">Scrie codul de admin:</span>
+        <input id="admin-secret-input" type="password" placeholder="Cod secret" />
+      </label>
+      <div class="auth-actions">
+        <button id="auth-register-btn">Înregistrare</button>
+        <button id="auth-login-btn" class="secondary">Login</button>
+        <button id="auth-anon-btn" class="secondary">Anonim</button>
+      </div>
+      <p id="auth-status" class="message"></p>
+    </div>
+  </div>
+
+  <div id="device-modal" class="device-modal hidden">
+    <div class="device-card">
+      <h3 id="device-title">Alege dispozitivul</h3>
+      <p id="device-subtitle">Poți folosi Auto, Telefon sau PC.</p>
+      <div class="device-actions">
+        <button id="device-auto-btn">Auto</button>
+        <button id="device-phone-btn" class="secondary">Telefon</button>
+        <button id="device-pc-btn" class="secondary">PC</button>
+      </div>
+    </div>
+  </div>
 
   <div id="center-banner" class="center-banner hidden"></div>
   <div id="screen-notification" class="screen-notification hidden">
