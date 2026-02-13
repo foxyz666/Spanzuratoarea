@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8" />
+  <title>Spânzurătoarea Online</title>
+  <link rel="stylesheet" href="style.css" />
+  <!-- Firebase compat SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+</head>
+<body>
+  <div class="app">
+    <h1>Spânzurătoarea Online</h1>
+
+    <!-- Ecran Party -->
+    <section id="party-screen" class="screen active">
+      <h2>Party Online</h2>
+
+      <div class="name-input">
+        <label>
+          Numele tău:
+          <input id="player-name-input" type="text" placeholder="ex: Alex" />
+        </label>
+      </div>
+
+      <div class="party-actions">
+        <button id="create-party-btn">Create Party</button>
+        <button id="join-party-btn" class="secondary">Join Party</button>
+        <button id="online-search-btn" class="secondary">Search Online</button>
+      </div>
+      <p id="online-players-live" class="message">Online acum: 0 jucători</p>
+
+      <div id="online-search-panel" class="panel hidden">
+        <p><strong>Matchmaking Online</strong></p>
+        <p id="online-search-status">Căutăm un jucător disponibil...</p>
+        <button id="cancel-search-btn" class="secondary">Cancel Search</button>
+      </div>
+
+      <!-- Host: după Create Party -->
+      <div id="create-party-panel" class="panel hidden">
+        <p><strong>Lobby Party</strong></p>
+        <p>Party creat! Codul tău este:</p>
+        <div class="party-code-box">
+          <span id="party-code-display"></span>
+          <button id="copy-code-btn" class="small-btn">Copy</button>
+        </div>
+
+        <p id="slot-player-1">Persoana 1: -</p>
+        <p id="slot-player-2">Persoana 2: waiting...</p>
+        <p id="lobby-round-info" class="message"></p>
+
+        <p><strong>Cine este în party:</strong></p>
+        <ul id="party-players-list"></ul>
+
+        <div class="host-controls">
+          <label>
+            Cuvântul / expresia (ascunsă pentru ceilalți):
+            <input id="secret-word-input" type="password" />
+          </label>
+          <button id="start-game-btn" class="hidden">Start Game</button>
+        </div>
+      </div>
+
+      <!-- Guest: după Join Party -->
+      <div id="join-party-panel" class="panel hidden">
+        <p>Introdu codul primit de la prieten:</p>
+        <input id="join-code-input" type="text" placeholder="ex: ABCD12" />
+        <button id="join-code-confirm-btn">Connect</button>
+      </div>
+
+      <p id="party-status" class="message"></p>
+
+      <div class="panel">
+        <p><strong>Leaderboard Global</strong></p>
+        <ul id="leaderboard-list"></ul>
+      </div>
+    </section>
+
+    <!-- Ecran Joc -->
+    <section id="game-screen" class="screen">
+      <h2>Joc</h2>
+      <p>Party code: <strong id="game-party-code"></strong></p>
+      <p id="scoreboard" class="scoreboard">Scor: -</p>
+
+      <p>Jucători în party:</p>
+      <ul id="game-players-list"></ul>
+
+      <div class="hangman-box">
+        <svg id="hangman-svg" viewBox="0 0 220 220" aria-label="Spânzurătoare">
+          <line x1="20" y1="205" x2="170" y2="205" class="gallow" />
+          <line x1="55" y1="205" x2="55" y2="20" class="gallow" />
+          <line x1="55" y1="20" x2="140" y2="20" class="gallow" />
+          <line x1="140" y1="20" x2="140" y2="45" class="gallow" />
+
+          <circle cx="140" cy="62" r="16" class="hang-part" data-step="1" />
+          <line x1="140" y1="78" x2="140" y2="125" class="hang-part" data-step="2" />
+          <line x1="140" y1="95" x2="118" y2="112" class="hang-part" data-step="3" />
+          <line x1="140" y1="95" x2="162" y2="112" class="hang-part" data-step="4" />
+          <line x1="140" y1="125" x2="122" y2="153" class="hang-part" data-step="5" />
+          <line x1="140" y1="125" x2="158" y2="153" class="hang-part" data-step="6" />
+          <line x1="132" y1="58" x2="137" y2="62" class="hang-part" data-step="7" />
+          <line x1="137" y1="58" x2="132" y2="62" class="hang-part" data-step="7" />
+          <line x1="143" y1="58" x2="148" y2="62" class="hang-part" data-step="7" />
+          <line x1="148" y1="58" x2="143" y2="62" class="hang-part" data-step="7" />
+        </svg>
+      </div>
+
+      <p id="turn-info" class="message"></p>
+
+      <div class="status-bar">
+        <span>Greșeli: <strong id="wrong-count">0</strong> / <span id="max-wrong">7</span></span>
+      </div>
+
+      <div id="word-display" class="word-display"></div>
+
+      <div class="controls">
+        <div class="guess-input">
+          <label for="letter-input">Ghicitorul: ghicește o literă</label>
+          <input id="letter-input" type="text" maxlength="1" autocomplete="off" />
+          <button id="guess-btn">Ghicește</button>
+        </div>
+        <div id="keyboard" class="keyboard"></div>
+      </div>
+
+      <div class="panel chat-panel">
+        <p><strong>Chat Party</strong></p>
+        <div id="chat-messages" class="chat-messages"></div>
+        <div class="chat-input-row">
+          <input id="chat-input" type="text" placeholder="Scrie un mesaj..." maxlength="240" />
+          <button id="send-chat-btn" class="secondary">Trimite</button>
+        </div>
+      </div>
+
+      <p id="game-message" class="message"></p>
+    </section>
+  </div>
+
+  <footer class="site-footer">
+    <p>Social</p>
+    <div class="social-links">
+      <a id="social-facebook" class="social-icon" href="#" target="_blank" rel="noopener noreferrer" aria-label="Facebook">F</a>
+      <a id="social-instagram" class="social-icon" href="#" target="_blank" rel="noopener noreferrer" aria-label="Instagram">I</a>
+      <a id="social-tiktok" class="social-icon" href="#" target="_blank" rel="noopener noreferrer" aria-label="TikTok">T</a>
+      <a id="social-youtube" class="social-icon" href="#" target="_blank" rel="noopener noreferrer" aria-label="YouTube">Y</a>
+      <a id="social-discord" class="social-icon" href="#" target="_blank" rel="noopener noreferrer" aria-label="Discord">D</a>
+    </div>
+  </footer>
+
+  <div id="center-banner" class="center-banner hidden"></div>
+  <div id="screen-notification" class="screen-notification hidden">
+    <span id="screen-notification-text"></span>
+  </div>
+  <canvas id="fireworks-canvas" class="fireworks-canvas hidden"></canvas>
+
+  <script src="script.js"></script>
+</body>
+</html>
