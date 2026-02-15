@@ -84,6 +84,7 @@ const adminSecretInput = document.getElementById("admin-secret-input");
 const authRegisterBtn = document.getElementById("auth-register-btn");
 const authLoginBtn = document.getElementById("auth-login-btn");
 const authAnonBtn = document.getElementById("auth-anon-btn");
+const authLogoutBtn = document.getElementById("auth-logout-btn");
 const authStatus = document.getElementById("auth-status");
 
 const playerNameInput = document.getElementById("player-name-input");
@@ -185,6 +186,7 @@ const I18N = {
     authRegister: "Înregistrare",
     authLogin: "Login",
     authAnon: "Anonim",
+    authLogout: "Logout",
     authNeedUserPass: "Completează username și parolă.",
     authRegisterSuccess: "Cont creat cu succes.",
     authRegisterAdmin: "Cont creat cu rol admin.",
@@ -192,6 +194,7 @@ const I18N = {
     authLoginSuccess: "Autentificare reușită.",
     authLoginFail: "Date invalide.",
     authAnonReady: "Mod anonim activ.",
+    authLogoutSuccess: "Te-ai delogat.",
     adminToolsTitle: "Unelte Admin",
     adminPeekWordBtn: "👁 Vezi cuvântul",
     adminRemoveWrongBtn: "🩹 Șterge o greșeală",
@@ -291,6 +294,7 @@ const I18N = {
     authRegister: "Регистрация",
     authLogin: "Войти",
     authAnon: "Анонимно",
+    authLogout: "Выйти",
     authNeedUserPass: "Введите имя пользователя и пароль.",
     authRegisterSuccess: "Аккаунт успешно создан.",
     authRegisterAdmin: "Аккаунт создан с ролью админа.",
@@ -298,6 +302,7 @@ const I18N = {
     authLoginSuccess: "Успешный вход.",
     authLoginFail: "Неверные данные.",
     authAnonReady: "Анонимный режим активирован.",
+    authLogoutSuccess: "Вы вышли из аккаунта.",
     adminToolsTitle: "Инструменты Админа",
     adminPeekWordBtn: "👁 Показать слово",
     adminRemoveWrongBtn: "🩹 Убрать ошибку",
@@ -463,11 +468,34 @@ function applyUserToPlayerName() {
   }
 }
 
+function updateAuthLauncherUi() {
+  const loggedAccount = Boolean(currentUser && !currentUser.isAnonymous);
+
+  if (authRegisterBtn) authRegisterBtn.classList.toggle("hidden", loggedAccount);
+  if (authLoginBtn) authLoginBtn.classList.toggle("hidden", loggedAccount);
+  if (authAnonBtn) authAnonBtn.classList.toggle("hidden", loggedAccount);
+  if (authLogoutBtn) authLogoutBtn.classList.toggle("hidden", !loggedAccount);
+
+  if (!authOpenBtn) return;
+
+  authOpenBtn.classList.remove("auth-user-name", "user-glow", "admin-glow");
+  if (loggedAccount) {
+    authOpenBtn.textContent = currentUser.displayName || "User";
+    authOpenBtn.classList.add("auth-user-name");
+    authOpenBtn.classList.add(currentUser.isAdmin ? "admin-glow" : "user-glow");
+    authOpenBtn.title = `${t("authOpenTitle")}: ${currentUser.displayName || "User"}`;
+  } else {
+    authOpenBtn.textContent = "👤";
+    authOpenBtn.title = t("authOpenTitle");
+  }
+}
+
 function setCurrentUser(user) {
   currentUser = user;
   isAdminUser = Boolean(user?.isAdmin);
   applyUserToPlayerName();
   updateAdminToolsVisibility();
+  updateAuthLauncherUi();
 
   if (user) {
     localStorage.setItem("spz_user", JSON.stringify(user));
@@ -579,6 +607,18 @@ function continueAnonymous() {
     isAnonymous: true,
   });
   setAuthStatus(t("authAnonReady"));
+  closeAuthModal();
+}
+
+function logoutAccount() {
+  setCurrentUser(null);
+  if (authPasswordInput) authPasswordInput.value = "";
+  if (adminSecretInput) adminSecretInput.value = "";
+  if (authAdminCheckbox) {
+    authAdminCheckbox.checked = false;
+    syncAdminSecretVisibility();
+  }
+  setAuthStatus(t("authLogoutSuccess"));
   closeAuthModal();
 }
 
@@ -700,6 +740,7 @@ function setLanguage(lang) {
   authRegisterBtn.textContent = t("authRegister");
   authLoginBtn.textContent = t("authLogin");
   authAnonBtn.textContent = t("authAnon");
+  authLogoutBtn.textContent = t("authLogout");
   chatToggleBtn.title = t("chatToggleTitle");
   chatMinimizeBtn.title = t("chatMinimizeTitle");
   document.getElementById("admin-tools-title").textContent = t("adminToolsTitle");
@@ -728,6 +769,8 @@ function setLanguage(lang) {
     const adminPart = currentUser.isAdmin ? t("authAdminBadge") : "";
     setAuthStatus(t("authHello", { name: currentUser.displayName, admin: adminPart }));
   }
+
+  updateAuthLauncherUi();
 }
 
 // ===== Utilitare =====
@@ -1954,6 +1997,10 @@ authLoginBtn?.addEventListener("click", async () => {
 
 authAnonBtn?.addEventListener("click", () => {
   continueAnonymous();
+});
+
+authLogoutBtn?.addEventListener("click", () => {
+  logoutAccount();
 });
 
 adminPeekWordBtn?.addEventListener("click", () => {

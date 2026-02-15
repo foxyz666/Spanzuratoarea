@@ -109,6 +109,32 @@ h1 {
   justify-content: center;
 }
 
+#auth-open-btn.auth-user-name {
+  width: auto;
+  min-width: 42px;
+  max-width: min(42vw, 220px);
+  padding: 0 12px;
+  font-size: 0.92rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#auth-open-btn.auth-user-name.user-glow {
+  color: #ffd9dd;
+  text-shadow: 0 0 6px rgba(236, 103, 120, 0.58), 0 0 12px rgba(236, 103, 120, 0.32);
+}
+
+#auth-open-btn.auth-user-name.admin-glow {
+  background-image: linear-gradient(90deg, #ffffff 0 50%, #b9cfff 50% 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 0 6px rgba(255, 255, 255, 0.62), 0 0 13px rgba(153, 198, 255, 0.46);
+}
+
 .chat-unread-badge {
   position: absolute;
   top: -6px;
@@ -239,6 +265,13 @@ h1 {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+#secret-label {
+  display: inline-block;
+  font-size: 1.02rem;
+  font-weight: 700;
+  margin-bottom: 6px;
 }
 
 ul {
