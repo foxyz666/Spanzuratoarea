@@ -279,6 +279,31 @@ ul {
   padding-left: 18px;
 }
 
+.admin-player-name-btn {
+  padding: 0;
+  border: none;
+  background: none;
+  box-shadow: none;
+  color: #ff8a8a;
+  font-weight: 700;
+  text-align: left;
+  border-radius: 0;
+  text-shadow: 0 0 6px rgba(235, 97, 97, 0.45);
+}
+
+.admin-player-name-btn:hover {
+  transform: none;
+  box-shadow: none;
+  color: #ffb3b3;
+  text-decoration: underline;
+}
+
+.admin-player-name-btn:active {
+  transform: none;
+  box-shadow: none;
+  opacity: 1;
+}
+
 input {
   padding: 8px 10px;
   border-radius: 8px;

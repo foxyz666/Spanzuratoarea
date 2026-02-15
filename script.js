@@ -14,8 +14,8 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 const DEFAULT_NOTIFICATION_MS = 3500;
-const ROOM_TTL_MS = 30 * 60 * 1000;
-const ROOM_CLEANUP_INTERVAL_MS = 90 * 1000;
+const ROOM_TTL_MS = 2 * 60 * 1000;
+const ROOM_CLEANUP_INTERVAL_MS = 20 * 1000;
 const SEARCH_RETRY_INTERVAL_MS = 1800;
 const ADMIN_SECRET_HASH =
   "b6fb730c7661050aaeda0b0e41f7af6a3ac90c02b43ecbabf338b036762791bf";
@@ -86,6 +86,7 @@ const authLoginBtn = document.getElementById("auth-login-btn");
 const authAnonBtn = document.getElementById("auth-anon-btn");
 const authLogoutBtn = document.getElementById("auth-logout-btn");
 const authStatus = document.getElementById("auth-status");
+const nameInputWrap = document.querySelector(".name-input");
 
 const playerNameInput = document.getElementById("player-name-input");
 const createPartyBtn = document.getElementById("create-party-btn");
@@ -195,6 +196,8 @@ const I18N = {
     authLoginFail: "Date invalide.",
     authAnonReady: "Mod anonim activ.",
     authLogoutSuccess: "Te-ai delogat.",
+    adminRoleDefault: "Administrator",
+    adminRoleReveal: "{name}: {role}",
     adminToolsTitle: "Unelte Admin",
     adminPeekWordBtn: "👁 Vezi cuvântul",
     adminRemoveWrongBtn: "🩹 Șterge o greșeală",
@@ -303,6 +306,8 @@ const I18N = {
     authLoginFail: "Неверные данные.",
     authAnonReady: "Анонимный режим активирован.",
     authLogoutSuccess: "Вы вышли из аккаунта.",
+    adminRoleDefault: "Администратор",
+    adminRoleReveal: "{name}: {role}",
     adminToolsTitle: "Инструменты Админа",
     adminPeekWordBtn: "👁 Показать слово",
     adminRemoveWrongBtn: "🩹 Убрать ошибку",
@@ -468,6 +473,12 @@ function applyUserToPlayerName() {
   }
 }
 
+function updateNameInputVisibility() {
+  if (!nameInputWrap) return;
+  const loggedAccount = Boolean(currentUser && !currentUser.isAnonymous);
+  nameInputWrap.classList.toggle("hidden", loggedAccount);
+}
+
 function updateAuthLauncherUi() {
   const loggedAccount = Boolean(currentUser && !currentUser.isAnonymous);
 
@@ -494,6 +505,7 @@ function setCurrentUser(user) {
   currentUser = user;
   isAdminUser = Boolean(user?.isAdmin);
   applyUserToPlayerName();
+  updateNameInputVisibility();
   updateAdminToolsVisibility();
   updateAuthLauncherUi();
 
@@ -554,6 +566,7 @@ async function registerAccount() {
     usernameKey,
     displayName: userData.displayName,
     isAdmin,
+    adminTitle: isAdmin ? userData.adminTitle || "Administrator" : "",
     isAnonymous: false,
   });
 
@@ -590,6 +603,7 @@ async function loginAccount() {
     usernameKey,
     displayName: user.displayName || rawUsername.trim() || usernameKey,
     isAdmin: Boolean(user.isAdmin),
+    adminTitle: user.adminTitle || user.adminLabel || (user.isAdmin ? "Administrator" : ""),
     isAnonymous: false,
   });
 
@@ -1057,6 +1071,10 @@ function renderScoreboard(room) {
 
   const ordered = getOrderedPlayers(room.players || {});
   const scores = room.scores || {};
+  const formatScoreName = (player) => {
+    if (!player) return "-";
+    return player.isAdmin ? `${player.name}${t("authAdminBadge")}` : player.name;
+  };
 
   if (!ordered.length) {
     scoreboardEl.textContent = t("scoreSingle", { p1: "-", s1: 0 });
@@ -1066,7 +1084,7 @@ function renderScoreboard(room) {
   if (ordered.length === 1) {
     const p = ordered[0];
     scoreboardEl.textContent = t("scoreSingle", {
-      p1: p.name,
+      p1: formatScoreName(p),
       s1: scores[p.id] || 0,
     });
     return;
@@ -1075,10 +1093,10 @@ function renderScoreboard(room) {
   const p1 = ordered[0];
   const p2 = ordered[1];
   scoreboardEl.textContent = t("scoreDuel", {
-    p1: p1.name,
+    p1: formatScoreName(p1),
     s1: scores[p1.id] || 0,
     s2: scores[p2.id] || 0,
-    p2: p2.name,
+    p2: formatScoreName(p2),
   });
 }
 
@@ -1169,7 +1187,23 @@ function renderPlayersList(listEl, playersObj) {
   const ordered = getOrderedPlayers(playersObj);
   ordered.forEach((p) => {
     const li = document.createElement("li");
-    li.textContent = p.name + (p.role === "host" ? ` (${t("hostTag")})` : "");
+    const displayName = p.name + (p.role === "host" ? ` (${t("hostTag")})` : "");
+
+    if (p?.isAdmin) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "admin-player-name-btn";
+      btn.textContent = displayName;
+      btn.title = p.adminTitle || p.adminLabel || t("adminRoleDefault");
+      btn.addEventListener("click", () => {
+        const roleText = p.adminTitle || p.adminLabel || t("adminRoleDefault");
+        showScreenNotification(t("adminRoleReveal", { name: p.name || "User", role: roleText }));
+      });
+      li.appendChild(btn);
+    } else {
+      li.textContent = displayName;
+    }
+
     listEl.appendChild(li);
   });
 }
@@ -1326,6 +1360,8 @@ async function createSearchRoomAsHost() {
         id: myId,
         name: myName,
         role: "host",
+        isAdmin: Boolean(currentUser?.isAdmin),
+        adminTitle: currentUser?.adminTitle || currentUser?.adminLabel || "",
       },
     },
   });
@@ -1378,6 +1414,8 @@ async function tryJoinWaitingRoom({ excludeCode = "" } = {}) {
           id: myId,
           name: myName,
           role: "guest",
+          isAdmin: Boolean(currentUser?.isAdmin),
+          adminTitle: currentUser?.adminTitle || currentUser?.adminLabel || "",
         },
       };
       room.scores = {
@@ -1508,8 +1546,6 @@ function subscribeToRoom(code) {
       onlineSearchStatus.textContent = t("foundPlayer");
       showScreenNotification(t("foundPlayer"), "win");
     }
-
-    refreshCurrentRoomTtl();
 
     renderChat(room);
 
@@ -1658,6 +1694,8 @@ createPartyBtn.addEventListener("click", async () => {
         id: myId,
         name: myName,
         role: "host",
+        isAdmin: Boolean(currentUser?.isAdmin),
+        adminTitle: currentUser?.adminTitle || currentUser?.adminLabel || "",
       },
     },
   });
@@ -1723,6 +1761,8 @@ joinCodeConfirmBtn.addEventListener("click", async () => {
     id: myId,
     name: myName,
     role: "guest",
+    isAdmin: Boolean(currentUser?.isAdmin),
+    adminTitle: currentUser?.adminTitle || currentUser?.adminLabel || "",
   });
 
   await roomRef.child("scores/" + myId).set(room.scores?.[myId] || 0);
@@ -2053,6 +2093,10 @@ function initPreferences() {
           usernameKey: parsedUser.usernameKey || "",
           displayName: parsedUser.displayName,
           isAdmin: Boolean(parsedUser.isAdmin),
+          adminTitle:
+            parsedUser.adminTitle ||
+            parsedUser.adminLabel ||
+            (parsedUser.isAdmin ? "Administrator" : ""),
           isAnonymous: Boolean(parsedUser.isAnonymous),
         });
       }
