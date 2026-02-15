@@ -884,9 +884,16 @@ function setLanguage(lang) {
   authLogoutBtn.textContent = t("authLogout");
   chatToggleBtn.title = t("chatToggleTitle");
   chatMinimizeBtn.title = t("chatMinimizeTitle");
-  document.getElementById("admin-tools-title").textContent = t("adminToolsTitle");
-  adminPeekWordBtn.textContent = t("adminPeekWordBtn");
-  adminRemoveWrongBtn.textContent = t("adminRemoveWrongBtn");
+  const adminToolsTitleEl = document.getElementById("admin-tools-title");
+  if (adminToolsTitleEl) {
+    adminToolsTitleEl.textContent = t("adminToolsTitle");
+  }
+  adminPeekWordBtn.textContent = "👁";
+  adminPeekWordBtn.title = t("adminPeekWordBtn");
+  adminPeekWordBtn.setAttribute("aria-label", t("adminPeekWordBtn"));
+  adminRemoveWrongBtn.textContent = "🩹";
+  adminRemoveWrongBtn.title = t("adminRemoveWrongBtn");
+  adminRemoveWrongBtn.setAttribute("aria-label", t("adminRemoveWrongBtn"));
   document.getElementById("device-title").textContent = t("deviceTitle");
   document.getElementById("device-subtitle").textContent = t("deviceSubtitle");
   deviceAutoBtn.textContent = t("deviceAuto");
@@ -2334,13 +2341,17 @@ function initPreferences() {
 
   const savedMode =
     localStorage.getItem("spz_device_mode") || getCookie("spz_device_mode") || "";
-  if (savedMode === "auto" || savedMode === "phone" || savedMode === "pc") {
-    applyDeviceMode(savedMode);
-    deviceModal?.classList.add("hidden");
-  } else {
-    applyDeviceMode("auto");
-    deviceModal?.classList.remove("hidden");
+  const mobileEntry = detectAutoDeviceMode() === "phone";
+  const hasValidSavedMode = savedMode === "auto" || savedMode === "phone" || savedMode === "pc";
+
+  let initialMode = "auto";
+  if (hasValidSavedMode) {
+    initialMode = mobileEntry && savedMode === "pc" ? "auto" : savedMode;
   }
+
+  applyDeviceMode(initialMode);
+  persistDeviceMode(initialMode);
+  deviceModal?.classList.add("hidden");
 }
 
 async function initAutoRejoin() {

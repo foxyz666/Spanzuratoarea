@@ -27,11 +27,11 @@ body {
 
 body.device-mobile .app {
   max-width: 560px;
-  padding: 14px 10px 20px;
+  padding: 10px 8px 18px;
 }
 
 body.device-mobile .screen {
-  padding: 14px 12px;
+  padding: 12px 10px;
 }
 
 body.device-mobile .party-actions button,
@@ -53,6 +53,82 @@ body.device-mobile .chat-input-row {
 
 body.device-mobile #letter-input {
   width: 100%;
+}
+
+body.device-mobile h1 {
+  font-size: clamp(1.25rem, 5vw, 1.6rem);
+  margin: 6px 56px 12px 8px;
+  text-align: left;
+}
+
+body.device-mobile h2 {
+  margin-top: 4px;
+  font-size: 1.12rem;
+}
+
+body.device-mobile .lang-switch {
+  top: 8px;
+  right: 8px;
+}
+
+body.device-mobile .quick-tools {
+  top: 48px;
+  right: 8px;
+}
+
+body.device-mobile .party-actions {
+  gap: 8px;
+}
+
+body.device-mobile .panel {
+  padding: 10px;
+}
+
+body.device-mobile .status-bar,
+body.device-mobile .message,
+body.device-mobile .scoreboard {
+  font-size: 0.86rem;
+}
+
+body.device-mobile .hangman-box {
+  padding: 6px;
+}
+
+body.device-mobile #hangman-svg {
+  width: min(66vw, 190px);
+  height: min(66vw, 190px);
+}
+
+body.device-mobile .word-display {
+  min-height: 58px;
+  gap: 6px;
+  padding: 8px;
+}
+
+body.device-mobile .letter-slot {
+  min-width: 22px;
+  height: 34px;
+  font-size: 1.25rem;
+}
+
+body.device-mobile .letter-slot.space {
+  width: 14px;
+}
+
+body.device-mobile .keyboard {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 5px;
+  padding: 6px;
+}
+
+body.device-mobile .key-btn {
+  min-height: 34px;
+  font-size: 0.8rem;
+}
+
+body.device-mobile .site-footer {
+  margin: 10px 0 8px;
+  padding: 0 10px;
 }
 
 .app {
@@ -233,8 +309,37 @@ h1 {
 }
 
 .admin-tools {
-  padding-top: 12px;
-  padding-bottom: 12px;
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  z-index: 119;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.admin-tools .admin-tools-actions {
+  margin-top: 0;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+
+.admin-icon-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  padding: 0;
+  font-size: 1.05rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.admin-icon-btn.secondary {
+  background: rgba(34, 37, 48, 0.92);
 }
 
 .hidden {
@@ -695,6 +800,16 @@ button.small-btn {
 body.device-mobile #chat-window {
   right: 8px;
   left: 8px;
+  width: auto;
+  bottom: 8px;
+}
+
+body.device-mobile .admin-tools {
+  left: 8px;
+  bottom: 58px;
+}
+
+body.device-mobile .admin-tools-actions button {
   width: auto;
 }
 
