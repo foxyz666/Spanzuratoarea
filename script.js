@@ -17,6 +17,7 @@ const DEFAULT_NOTIFICATION_MS = 3500;
 const ROOM_TTL_MS = 2 * 60 * 1000;
 const ROOM_CLEANUP_INTERVAL_MS = 20 * 1000;
 const SEARCH_RETRY_INTERVAL_MS = 1800;
+const REJOIN_STORAGE_KEY = "spz_rejoin_state";
 const ADMIN_SECRET_HASH =
   "b6fb730c7661050aaeda0b0e41f7af6a3ac90c02b43ecbabf338b036762791bf";
 
@@ -37,6 +38,7 @@ let gameOver = false;
 
 let activeRoomRef = null;
 let activeRoomListener = null;
+let activePlayerPresenceRef = null;
 
 let searchActive = false;
 let searchOwnedRoomCode = null;
@@ -63,6 +65,10 @@ let chatWindowOpen = false;
 let unreadChatCount = 0;
 let lastChatRenderedCount = 0;
 let chatInitialized = false;
+let opponentWasPresent = false;
+let opponentDisconnectActive = false;
+let opponentDisconnectUntil = 0;
+let opponentDisconnectInterval = null;
 
 // ===== DOM =====
 const partyScreen = document.getElementById("party-screen");
@@ -237,6 +243,9 @@ const I18N = {
     copiedCode: "Cod copiat!",
     copyFail: "Nu am putut copia codul.",
     searchStopped: "Căutarea a fost oprită.",
+    opponentDisconnected: "Așteptăm adversarul, s-a deconectat.",
+    opponentDisconnectedWait: "Așteptăm adversarul, s-a deconectat. Timp rămas: {time}",
+    opponentReconnected: "Adversarul s-a reconectat.",
     matchmakingRunning: "Matchmaking în curs...",
     matchmakingError: "A apărut o eroare la matchmaking. Încearcă din nou.",
     youWonWithWord: "Ai câștigat! Felicitări! Cuvântul a fost: \"{word}\".",
@@ -347,6 +356,9 @@ const I18N = {
     copiedCode: "Код скопирован!",
     copyFail: "Не удалось скопировать код.",
     searchStopped: "Поиск остановлен.",
+    opponentDisconnected: "Ждём соперника: он отключился.",
+    opponentDisconnectedWait: "Ждём соперника: он отключился. Осталось: {time}",
+    opponentReconnected: "Соперник снова в сети.",
     matchmakingRunning: "Идёт подбор игрока...",
     matchmakingError: "Ошибка подбора. Попробуйте ещё раз.",
     youWonWithWord: "Вы выиграли! Поздравляем! Слово было: \"{word}\".",
@@ -521,6 +533,121 @@ function setCurrentUser(user) {
 function getActivePlayerName() {
   if (currentUser?.displayName) return currentUser.displayName;
   return playerNameInput.value.trim() || "Anon";
+}
+
+function buildCurrentPlayerPayload(role) {
+  return {
+    id: myId,
+    name: getActivePlayerName(),
+    role,
+    isAdmin: Boolean(currentUser?.isAdmin),
+    adminTitle: currentUser?.adminTitle || currentUser?.adminLabel || "",
+  };
+}
+
+function setPartyCodeInUrl(code) {
+  const url = new URL(window.location.href);
+  if (code) {
+    url.searchParams.set("party", String(code).toUpperCase());
+  } else {
+    url.searchParams.delete("party");
+  }
+  history.replaceState(null, "", url.toString());
+}
+
+function getPartyCodeFromUrl() {
+  const code = new URLSearchParams(window.location.search).get("party") || "";
+  return code.trim().toUpperCase();
+}
+
+function saveRejoinState(code) {
+  if (!code || !myId) return;
+  const payload = {
+    partyCode: String(code).toUpperCase(),
+    myId,
+    myRole,
+    myName: getActivePlayerName(),
+    savedAt: Date.now(),
+  };
+  localStorage.setItem(REJOIN_STORAGE_KEY, JSON.stringify(payload));
+}
+
+function getSavedRejoinState() {
+  try {
+    const raw = localStorage.getItem(REJOIN_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.partyCode) return null;
+    return parsed;
+  } catch {
+    localStorage.removeItem(REJOIN_STORAGE_KEY);
+    return null;
+  }
+}
+
+function clearRejoinState() {
+  localStorage.removeItem(REJOIN_STORAGE_KEY);
+}
+
+async function autoRejoinPartyIfPossible() {
+  const fromUrl = getPartyCodeFromUrl();
+  const saved = getSavedRejoinState();
+  const targetCode = fromUrl || (saved?.partyCode || "");
+  if (!targetCode) return;
+
+  const roomRef = db.ref("rooms/" + targetCode);
+  const snap = await roomRef.get();
+  if (!snap.exists()) {
+    clearRejoinState();
+    setPartyCodeInUrl("");
+    return;
+  }
+
+  const room = snap.val();
+  if (isRoomExpired(room)) {
+    try {
+      await roomRef.remove();
+    } catch {
+      // ignore
+    }
+    clearRejoinState();
+    setPartyCodeInUrl("");
+    return;
+  }
+
+  myId = saved?.myId || myId || randomId();
+  myRole = saved?.myRole || myRole || (room.hostId === myId ? "host" : "guest");
+  myName = getActivePlayerName();
+
+  const players = room.players || {};
+  const playersCount = Object.keys(players).length;
+  const alreadyInRoom = Boolean(players[myId]);
+
+  if (!alreadyInRoom && playersCount >= 2) {
+    partyStatus.textContent = t("partyFull");
+    clearRejoinState();
+    return;
+  }
+
+  const roleForRoom = room.hostId === myId ? "host" : myRole || "guest";
+  const playerPayload = buildCurrentPlayerPayload(roleForRoom);
+
+  await roomRef.child("players/" + myId).set(playerPayload);
+  await roomRef.child("scores/" + myId).set(room.scores?.[myId] || 0);
+
+  const updates = {
+    isPublicSearch: false,
+    expiresAt: computeRoomExpiry(),
+  };
+  if (roleForRoom !== "host" && (!room.roundGuesserId || room.roundGuesserId === room.roundSetterId)) {
+    updates.roundGuesserId = myId;
+  }
+  await roomRef.update(updates);
+
+  joinPartyPanel.classList.add("hidden");
+  createPartyPanel.classList.remove("hidden");
+  partyStatus.textContent = t("connectedParty");
+  subscribeToRoom(targetCode);
 }
 
 async function registerAccount() {
@@ -838,6 +965,78 @@ function setGameMessage(text, type = "") {
   gameMessage.textContent = text || "";
   gameMessage.classList.remove("win", "lose");
   if (type) gameMessage.classList.add(type);
+}
+
+function setControlsLockedForOpponentMissing(locked) {
+  const isLocked = Boolean(locked);
+
+  if (startGameBtn) startGameBtn.disabled = isLocked;
+  if (secretWordInput) secretWordInput.disabled = isLocked;
+  if (guessBtn) guessBtn.disabled = isLocked;
+  if (letterInput) letterInput.disabled = isLocked;
+  if (sendChatBtn) sendChatBtn.disabled = isLocked;
+  if (chatInput) chatInput.disabled = isLocked;
+  if (adminPeekWordBtn) adminPeekWordBtn.disabled = isLocked;
+  if (adminRemoveWrongBtn) adminRemoveWrongBtn.disabled = isLocked;
+
+  keyboard.querySelectorAll("button").forEach((btn) => {
+    btn.disabled = isLocked;
+  });
+}
+
+function clearOpponentDisconnectInterval() {
+  if (opponentDisconnectInterval) {
+    clearInterval(opponentDisconnectInterval);
+    opponentDisconnectInterval = null;
+  }
+}
+
+function renderOpponentDisconnectedUi() {
+  if (!opponentDisconnectActive) return;
+  const remainingSeconds = Math.max(
+    0,
+    Math.ceil((Number(opponentDisconnectUntil || 0) - Date.now()) / 1000)
+  );
+  const waitText = t("opponentDisconnectedWait", {
+    time: formatElapsed(remainingSeconds),
+  });
+
+  partyStatus.textContent = waitText;
+  turnInfo.textContent = waitText;
+  setGameMessage(waitText);
+  setControlsLockedForOpponentMissing(true);
+}
+
+function startOpponentDisconnectedMode(expiresAt) {
+  opponentDisconnectActive = true;
+  opponentDisconnectUntil = Number(expiresAt || 0);
+
+  setControlsLockedForOpponentMissing(true);
+  renderOpponentDisconnectedUi();
+
+  clearOpponentDisconnectInterval();
+  opponentDisconnectInterval = setInterval(() => {
+    if (!opponentDisconnectActive) return;
+    renderOpponentDisconnectedUi();
+  }, 1000);
+}
+
+function stopOpponentDisconnectedMode(notifyReconnect = false) {
+  const wasActive = opponentDisconnectActive;
+  opponentDisconnectActive = false;
+  opponentDisconnectUntil = 0;
+  clearOpponentDisconnectInterval();
+
+  if (!wasActive) return;
+
+  if (notifyReconnect) {
+    showScreenNotification(t("opponentReconnected"), "win");
+  }
+
+  if (chatInput) chatInput.disabled = false;
+  if (sendChatBtn) sendChatBtn.disabled = false;
+  if (adminPeekWordBtn) adminPeekWordBtn.disabled = false;
+  if (adminRemoveWrongBtn) adminRemoveWrongBtn.disabled = false;
 }
 
 function formatElapsed(seconds) {
@@ -1276,8 +1475,27 @@ function detachActiveRoomListener() {
   if (activeRoomRef && activeRoomListener) {
     activeRoomRef.off("value", activeRoomListener);
   }
+  if (activePlayerPresenceRef) {
+    activePlayerPresenceRef.onDisconnect().cancel();
+    activePlayerPresenceRef = null;
+  }
+  stopOpponentDisconnectedMode(false);
+  opponentWasPresent = false;
   activeRoomRef = null;
   activeRoomListener = null;
+}
+
+function armPlayerPresenceOnDisconnect(roomCode) {
+  if (!roomCode || !myId) return;
+
+  if (activePlayerPresenceRef) {
+    activePlayerPresenceRef.onDisconnect().cancel();
+    activePlayerPresenceRef = null;
+  }
+
+  const playerRef = db.ref(`rooms/${roomCode}/players/${myId}`);
+  playerRef.onDisconnect().remove();
+  activePlayerPresenceRef = playerRef;
 }
 
 function setSearchUiActive(active) {
@@ -1356,13 +1574,7 @@ async function createSearchRoomAsHost() {
     },
     chatMessages: {},
     players: {
-      [myId]: {
-        id: myId,
-        name: myName,
-        role: "host",
-        isAdmin: Boolean(currentUser?.isAdmin),
-        adminTitle: currentUser?.adminTitle || currentUser?.adminLabel || "",
-      },
+      [myId]: buildCurrentPlayerPayload("host"),
     },
   });
 
@@ -1410,13 +1622,7 @@ async function tryJoinWaitingRoom({ excludeCode = "" } = {}) {
 
       room.players = {
         ...players,
-        [myId]: {
-          id: myId,
-          name: myName,
-          role: "guest",
-          isAdmin: Boolean(currentUser?.isAdmin),
-          adminTitle: currentUser?.adminTitle || currentUser?.adminLabel || "",
-        },
+        [myId]: buildCurrentPlayerPayload("guest"),
       };
       room.scores = {
         ...(room.scores || {}),
@@ -1509,20 +1715,31 @@ function subscribeToRoom(code) {
   unreadChatCount = 0;
   lastChatRenderedCount = 0;
   chatInitialized = false;
+  opponentWasPresent = false;
   updateChatUnreadBadge();
 
   const roomRef = db.ref("rooms/" + code);
   const listener = (snap) => {
     const room = snap.val();
-    if (!room) return;
+    if (!room) {
+      stopOpponentDisconnectedMode(false);
+      clearRejoinState();
+      setPartyCodeInUrl("");
+      return;
+    }
     if (isRoomExpired(room)) {
       partyStatus.textContent = t("partyNotExists");
+      stopOpponentDisconnectedMode(false);
+      clearRejoinState();
+      setPartyCodeInUrl("");
       return;
     }
     currentRoom = room;
     updateAdminToolsVisibility();
 
     partyCode = code;
+    setPartyCodeInUrl(code);
+    saveRejoinState(code);
     gamePartyCodeEl.textContent = code;
     partyCodeDisplay.textContent = code;
 
@@ -1532,6 +1749,10 @@ function subscribeToRoom(code) {
     renderScoreboard(room);
 
     const playersCount = Object.keys(room.players || {}).length;
+    const opponentDisconnected = playersCount < 2 && opponentWasPresent;
+    if (playersCount >= 2) {
+      opponentWasPresent = true;
+    }
     const setterName = getPlayerNameById(room.players, room.roundSetterId);
     const guesserName = getPlayerNameById(room.players, room.roundGuesserId);
 
@@ -1582,7 +1803,9 @@ function subscribeToRoom(code) {
     maxWrongSpan.textContent = String(maxWrong);
     renderWord();
     updateHangmanParts(wrongGuesses);
-    syncKeyboard(room);
+    if (!opponentDisconnected) {
+      syncKeyboard(room);
+    }
 
     if (room.state === "playing") {
       showScreen(gameScreen);
@@ -1647,11 +1870,21 @@ function subscribeToRoom(code) {
         }
       }
     }
+
+    if (opponentDisconnected) {
+      if (!opponentDisconnectActive) {
+        showScreenNotification(t("opponentDisconnected"), "lose");
+      }
+      startOpponentDisconnectedMode(room.expiresAt || computeRoomExpiry());
+    } else {
+      stopOpponentDisconnectedMode(opponentWasPresent);
+    }
   };
 
   roomRef.on("value", listener);
   activeRoomRef = roomRef;
   activeRoomListener = listener;
+  armPlayerPresenceOnDisconnect(code);
 }
 
 // ===== CREATE PARTY (Host) =====
@@ -1690,13 +1923,7 @@ createPartyBtn.addEventListener("click", async () => {
     },
     chatMessages: {},
     players: {
-      [myId]: {
-        id: myId,
-        name: myName,
-        role: "host",
-        isAdmin: Boolean(currentUser?.isAdmin),
-        adminTitle: currentUser?.adminTitle || currentUser?.adminLabel || "",
-      },
+      [myId]: buildCurrentPlayerPayload("host"),
     },
   });
 
@@ -1758,11 +1985,7 @@ joinCodeConfirmBtn.addEventListener("click", async () => {
   partyCode = code;
 
   await roomRef.child("players/" + myId).set({
-    id: myId,
-    name: myName,
-    role: "guest",
-    isAdmin: Boolean(currentUser?.isAdmin),
-    adminTitle: currentUser?.adminTitle || currentUser?.adminLabel || "",
+    ...buildCurrentPlayerPayload("guest"),
   });
 
   await roomRef.child("scores/" + myId).set(room.scores?.[myId] || 0);
@@ -1980,7 +2203,11 @@ letterInput.addEventListener("keydown", (e) => {
 // copiere cod party
 copyCodeBtn.addEventListener("click", async () => {
   try {
-    await navigator.clipboard.writeText(partyCodeDisplay.textContent || "");
+    const code = (partyCodeDisplay.textContent || "").trim().toUpperCase();
+    const link = code
+      ? `${window.location.origin}${window.location.pathname}?party=${encodeURIComponent(code)}`
+      : "";
+    await navigator.clipboard.writeText(link || code);
     partyStatus.textContent = t("copiedCode");
   } catch {
     partyStatus.textContent = t("copyFail");
@@ -2116,6 +2343,14 @@ function initPreferences() {
   }
 }
 
+async function initAutoRejoin() {
+  try {
+    await autoRejoinPartyIfPossible();
+  } catch {
+    // ignore auto rejoin failures
+  }
+}
+
 buildKeyboard();
 showScreen(partyScreen);
 initPreferences();
@@ -2124,3 +2359,4 @@ updateChatUnreadBadge();
 setChatWindowOpen(false);
 startRoomCleanupLoop();
 subscribeOnlinePlayersLive();
+initAutoRejoin();
