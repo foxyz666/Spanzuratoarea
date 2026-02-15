@@ -80,6 +80,15 @@ body.device-mobile .party-actions {
   gap: 8px;
 }
 
+body.device-mobile .game-top-row {
+  align-items: center;
+}
+
+body.device-mobile #leave-party-btn {
+  margin-left: 0;
+  padding: 4px 10px;
+}
+
 body.device-mobile .panel {
   padding: 10px;
 }
@@ -153,6 +162,21 @@ h1 {
 
 .screen.active {
   display: block;
+}
+
+.game-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.game-top-row h2 {
+  margin: 0;
+}
+
+#leave-party-btn {
+  margin-left: 0;
 }
 
 .lang-switch {
@@ -310,8 +334,8 @@ h1 {
 
 .admin-tools {
   position: fixed;
-  left: 12px;
-  bottom: 12px;
+  right: 58px;
+  top: 102px;
   z-index: 119;
   margin: 0;
   padding: 0;
@@ -805,8 +829,8 @@ body.device-mobile #chat-window {
 }
 
 body.device-mobile .admin-tools {
-  left: 8px;
-  bottom: 58px;
+  right: 56px;
+  top: 96px;
 }
 
 body.device-mobile .admin-tools-actions button {

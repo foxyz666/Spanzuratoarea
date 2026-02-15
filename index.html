@@ -40,6 +40,7 @@
         <button id="create-party-btn">Create Party</button>
         <button id="join-party-btn" class="secondary">Join Party</button>
         <button id="online-search-btn" class="secondary">Search Online</button>
+        <button id="reconnect-party-btn" class="secondary hidden">Reconnect</button>
       </div>
       <p id="online-players-live" class="message">Online acum: 0 jucători</p>
 
@@ -86,7 +87,10 @@
 
     <!-- Ecran Joc -->
     <section id="game-screen" class="screen">
-      <h2 id="game-title">Joc</h2>
+      <div class="game-top-row">
+        <h2 id="game-title">Joc</h2>
+        <button id="leave-party-btn" class="secondary small-btn">Leave Party</button>
+      </div>
       <p><span id="party-code-text">Party code:</span> <strong id="game-party-code"></strong></p>
       <p id="scoreboard" class="scoreboard">Scor: -</p>
 

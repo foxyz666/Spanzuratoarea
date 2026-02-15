@@ -61,6 +61,8 @@ let roomCleanupInterval = null;
 let lastRoomTtlRefreshAt = 0;
 let currentUser = null;
 let isAdminUser = false;
+let adminToolsOpen = false;
+let reconnectTargetCode = "";
 let chatWindowOpen = false;
 let unreadChatCount = 0;
 let lastChatRenderedCount = 0;
@@ -98,6 +100,7 @@ const playerNameInput = document.getElementById("player-name-input");
 const createPartyBtn = document.getElementById("create-party-btn");
 const joinPartyBtn = document.getElementById("join-party-btn");
 const onlineSearchBtn = document.getElementById("online-search-btn");
+const reconnectPartyBtn = document.getElementById("reconnect-party-btn");
 const cancelSearchBtn = document.getElementById("cancel-search-btn");
 
 const createPartyPanel = document.getElementById("create-party-panel");
@@ -121,6 +124,7 @@ const partyStatus = document.getElementById("party-status");
 
 const secretWordInput = document.getElementById("secret-word-input");
 const startGameBtn = document.getElementById("start-game-btn");
+const leavePartyBtn = document.getElementById("leave-party-btn");
 
 const gamePartyCodeEl = document.getElementById("game-party-code");
 const gamePlayersList = document.getElementById("game-players-list");
@@ -128,6 +132,7 @@ const wrongCountSpan = document.getElementById("wrong-count");
 const maxWrongSpan = document.getElementById("max-wrong");
 const wordDisplay = document.getElementById("word-display");
 const turnInfo = document.getElementById("turn-info");
+const hangmanSvg = document.getElementById("hangman-svg");
 
 const letterInput = document.getElementById("letter-input");
 const guessBtn = document.getElementById("guess-btn");
@@ -158,6 +163,7 @@ const I18N = {
     createParty: "Create Party",
     joinParty: "Join Party",
     searchOnline: "Search Online",
+    reconnectParty: "Reconnect",
     matchTitle: "Matchmaking Online",
     cancelSearch: "Cancel Search",
     lobbyTitle: "Lobby Party",
@@ -263,6 +269,13 @@ const I18N = {
     namePlaceholder: "ex: Alex",
     codePlaceholder: "ex: ABCD12",
     chatPlaceholder: "Scrie un mesaj...",
+    leaveParty: "Leave Party",
+    leftParty: "Ai ieșit din party.",
+    reconnectAvailable: "Ai un joc activ. Apasă Reconnect.",
+    reconnectFailed: "Reconnect indisponibil.",
+    opponentLeftClosing: "Adversarul are 2 minute pentru reconnect.",
+    opponentLeaveExitQuestion: "Adversarul are 2 minute pentru reconnect.\nVrei să ieși acum din party?",
+    partyClosedOpponentLeft: "Party-ul s-a închis (adversarul a ieșit).",
   },
   ru: {
     appTitle: "Виселица Онлайн",
@@ -271,6 +284,7 @@ const I18N = {
     createParty: "Создать лобби",
     joinParty: "Войти в лобби",
     searchOnline: "Поиск онлайн",
+    reconnectParty: "Переподключиться",
     matchTitle: "Онлайн подбор",
     cancelSearch: "Отменить поиск",
     lobbyTitle: "Лобби",
@@ -376,6 +390,13 @@ const I18N = {
     namePlaceholder: "напр: Alex",
     codePlaceholder: "напр: ABCD12",
     chatPlaceholder: "Напишите сообщение...",
+    leaveParty: "Выйти из лобби",
+    leftParty: "Вы вышли из лобби.",
+    reconnectAvailable: "Есть активная игра. Нажмите Переподключиться.",
+    reconnectFailed: "Переподключение недоступно.",
+    opponentLeftClosing: "У соперника есть 2 минуты на переподключение.",
+    opponentLeaveExitQuestion: "У соперника есть 2 минуты на переподключение.\nВыйти из лобби сейчас?",
+    partyClosedOpponentLeft: "Лобби закрыто (соперник вышел).",
   },
 };
 
@@ -474,7 +495,13 @@ function setChatWindowOpen(open) {
 
 function updateAdminToolsVisibility() {
   if (!adminTools) return;
-  adminTools.classList.toggle("hidden", !isAdminUser);
+  adminTools.classList.toggle("hidden", !isAdminUser || !adminToolsOpen);
+}
+
+function toggleAdminToolsByHangmanDoubleClick() {
+  if (!isAdminUser) return;
+  adminToolsOpen = !adminToolsOpen;
+  updateAdminToolsVisibility();
 }
 
 function applyUserToPlayerName() {
@@ -516,6 +543,7 @@ function updateAuthLauncherUi() {
 function setCurrentUser(user) {
   currentUser = user;
   isAdminUser = Boolean(user?.isAdmin);
+  adminToolsOpen = false;
   applyUserToPlayerName();
   updateNameInputVisibility();
   updateAdminToolsVisibility();
@@ -593,14 +621,14 @@ async function autoRejoinPartyIfPossible() {
   const fromUrl = getPartyCodeFromUrl();
   const saved = getSavedRejoinState();
   const targetCode = fromUrl || (saved?.partyCode || "");
-  if (!targetCode) return;
+  if (!targetCode) return false;
 
   const roomRef = db.ref("rooms/" + targetCode);
   const snap = await roomRef.get();
   if (!snap.exists()) {
     clearRejoinState();
     setPartyCodeInUrl("");
-    return;
+    return false;
   }
 
   const room = snap.val();
@@ -612,7 +640,7 @@ async function autoRejoinPartyIfPossible() {
     }
     clearRejoinState();
     setPartyCodeInUrl("");
-    return;
+    return false;
   }
 
   myId = saved?.myId || myId || randomId();
@@ -626,7 +654,7 @@ async function autoRejoinPartyIfPossible() {
   if (!alreadyInRoom && playersCount >= 2) {
     partyStatus.textContent = t("partyFull");
     clearRejoinState();
-    return;
+    return false;
   }
 
   const roleForRoom = room.hostId === myId ? "host" : myRole || "guest";
@@ -648,6 +676,130 @@ async function autoRejoinPartyIfPossible() {
   createPartyPanel.classList.remove("hidden");
   partyStatus.textContent = t("connectedParty");
   subscribeToRoom(targetCode);
+  return true;
+}
+
+function returnToMainMenu(statusText = "") {
+  detachActiveRoomListener();
+  partyCode = null;
+  currentRoom = null;
+  opponentWasPresent = false;
+  adminToolsOpen = false;
+  updateAdminToolsVisibility();
+  setPartyCodeInUrl("");
+  createPartyPanel.classList.add("hidden");
+  joinPartyPanel.classList.add("hidden");
+  onlineSearchPanel.classList.add("hidden");
+  showScreen(partyScreen);
+  if (statusText) {
+    partyStatus.textContent = statusText;
+  }
+}
+
+async function refreshReconnectOption() {
+  reconnectTargetCode = "";
+  reconnectPartyBtn?.classList.add("hidden");
+
+  const fromUrl = getPartyCodeFromUrl();
+  const saved = getSavedRejoinState();
+  const code = String(fromUrl || saved?.partyCode || "").trim().toUpperCase();
+  if (!code) return;
+
+  const roomRef = db.ref("rooms/" + code);
+  const snap = await roomRef.get();
+  if (!snap.exists()) {
+    clearRejoinState();
+    if (fromUrl) setPartyCodeInUrl("");
+    return;
+  }
+
+  const room = snap.val();
+  if (isRoomExpired(room)) {
+    clearRejoinState();
+    if (fromUrl) setPartyCodeInUrl("");
+    return;
+  }
+
+  const players = room.players || {};
+  const playersCount = Object.keys(players).length;
+  const savedId = saved?.myId || "";
+  const alreadyInRoom = Boolean(savedId && players[savedId]);
+
+  if (!alreadyInRoom && playersCount >= 2) {
+    clearRejoinState();
+    return;
+  }
+
+  reconnectTargetCode = code;
+  reconnectPartyBtn?.classList.remove("hidden");
+  if (!partyCode) {
+    partyStatus.textContent = t("reconnectAvailable");
+  }
+}
+
+function schedulePartyShutdownIfOpponentMissing() {
+  showCenterBanner(t("opponentDisconnected"), 5000);
+}
+
+async function leaveCurrentParty() {
+  if (!partyCode || !myId) {
+    returnToMainMenu(t("leftParty"));
+    return;
+  }
+
+  const code = partyCode;
+  try {
+    const roomRef = db.ref("rooms/" + code);
+    await roomRef.transaction((room) => {
+      if (!room) return room;
+
+      const players = { ...(room.players || {}) };
+      const scores = { ...(room.scores || {}) };
+      if (!players[myId]) return room;
+
+      delete players[myId];
+      delete scores[myId];
+
+      const remainingIds = Object.keys(players);
+      if (!remainingIds.length) {
+        return null;
+      }
+
+      room.players = players;
+      room.scores = scores;
+      room.state = "lobby";
+      room.isPublicSearch = false;
+      room.expiresAt = computeRoomExpiry();
+      room.endMessage = "";
+      room.resultWinnerId = "";
+      room.resultLoserId = "";
+      room.resultRoundNumber = 0;
+      room.originalWord = "";
+      room.secretWordNormalized = "";
+      room.lengths = [];
+      room.revealed = [];
+      room.wrongGuesses = 0;
+      room.guessedLetters = "";
+
+      const fallbackSetter = remainingIds[0];
+      if (!players[room.roundSetterId]) {
+        room.roundSetterId = fallbackSetter;
+      }
+      if (!players[room.roundGuesserId] || room.roundGuesserId === room.roundSetterId) {
+        const guesserCandidate = remainingIds.find((id) => id !== room.roundSetterId) || "";
+        room.roundGuesserId = guesserCandidate;
+      }
+
+      return room;
+    });
+  } catch {
+    // ignore temporary failures
+  }
+
+  clearRejoinState();
+  await stopOnlineSearch();
+  returnToMainMenu(t("leftParty"));
+  await refreshReconnectOption();
 }
 
 async function registerAccount() {
@@ -855,6 +1007,7 @@ function setLanguage(lang) {
   createPartyBtn.textContent = t("createParty");
   joinPartyBtn.textContent = t("joinParty");
   onlineSearchBtn.textContent = t("searchOnline");
+  reconnectPartyBtn.textContent = t("reconnectParty");
   document.getElementById("match-title").textContent = t("matchTitle");
   cancelSearchBtn.textContent = t("cancelSearch");
   document.getElementById("lobby-title").textContent = t("lobbyTitle");
@@ -866,6 +1019,7 @@ function setLanguage(lang) {
   document.getElementById("join-help").textContent = t("joinHelp");
   joinCodeConfirmBtn.textContent = t("connect");
   document.getElementById("game-title").textContent = t("gameTitle");
+  leavePartyBtn.textContent = t("leaveParty");
   document.getElementById("party-code-text").textContent = t("partyCode");
   document.getElementById("players-in-party").textContent = t("playersInParty");
   document.getElementById("guess-label").textContent = t("guessLabel");
@@ -1716,6 +1870,8 @@ function subscribeOnlinePlayersLive() {
 
 function subscribeToRoom(code) {
   detachActiveRoomListener();
+  reconnectTargetCode = "";
+  reconnectPartyBtn?.classList.add("hidden");
   lastHandledResultRound = 0;
   lastBannerKey = "";
   lastSeenRoundNumber = 0;
@@ -1731,14 +1887,13 @@ function subscribeToRoom(code) {
     if (!room) {
       stopOpponentDisconnectedMode(false);
       clearRejoinState();
-      setPartyCodeInUrl("");
+      returnToMainMenu(t("partyNotExists"));
       return;
     }
     if (isRoomExpired(room)) {
-      partyStatus.textContent = t("partyNotExists");
       stopOpponentDisconnectedMode(false);
       clearRejoinState();
-      setPartyCodeInUrl("");
+      returnToMainMenu(t("partyNotExists"));
       return;
     }
     currentRoom = room;
@@ -1880,7 +2035,8 @@ function subscribeToRoom(code) {
 
     if (opponentDisconnected) {
       if (!opponentDisconnectActive) {
-        showScreenNotification(t("opponentDisconnected"), "lose");
+        showScreenNotification(t("opponentDisconnected"), "lose", 5000);
+        schedulePartyShutdownIfOpponentMissing();
       }
       startOpponentDisconnectedMode(room.expiresAt || computeRoomExpiry());
     } else {
@@ -2024,6 +2180,30 @@ cancelSearchBtn.addEventListener("click", async () => {
   partyStatus.textContent = t("searchStopped");
   onlineSearchStatus.textContent = t("searchingStart");
   showCenterBanner("");
+});
+
+reconnectPartyBtn?.addEventListener("click", async () => {
+  try {
+    if (reconnectTargetCode) {
+      setPartyCodeInUrl(reconnectTargetCode);
+    }
+    const ok = await autoRejoinPartyIfPossible();
+    if (ok) {
+      reconnectPartyBtn.classList.add("hidden");
+      reconnectTargetCode = "";
+      return;
+    }
+  } catch {
+    // ignore and show fallback below
+  }
+
+  partyStatus.textContent = t("reconnectFailed");
+  reconnectPartyBtn.classList.add("hidden");
+  reconnectTargetCode = "";
+});
+
+leavePartyBtn?.addEventListener("click", async () => {
+  await leaveCurrentParty();
 });
 
 // ===== START ROUND (setter curent) =====
@@ -2285,6 +2465,10 @@ adminRemoveWrongBtn?.addEventListener("click", async () => {
   await adminRemoveWrongGuess();
 });
 
+hangmanSvg?.addEventListener("dblclick", () => {
+  toggleAdminToolsByHangmanDoubleClick();
+});
+
 chatToggleBtn?.addEventListener("click", () => {
   setChatWindowOpen(!chatWindowOpen);
 });
@@ -2356,9 +2540,9 @@ function initPreferences() {
 
 async function initAutoRejoin() {
   try {
-    await autoRejoinPartyIfPossible();
+    await refreshReconnectOption();
   } catch {
-    // ignore auto rejoin failures
+    // ignore reconnect availability failures
   }
 }
 
