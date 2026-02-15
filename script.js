@@ -14,6 +14,7 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 const DEFAULT_NOTIFICATION_MS = 3500;
+const LOSE_ANIMATION_MS = 4500;
 const ROOM_TTL_MS = 30 * 60 * 1000;
 const ROOM_CLEANUP_INTERVAL_MS = 90 * 1000;
 const SEARCH_RETRY_INTERVAL_MS = 1800;
@@ -53,6 +54,8 @@ let centerBannerTimeout = null;
 let screenNotificationTimeout = null;
 let fireworksTimeout = null;
 let fireworksRaf = null;
+let hangmanLoseTimeout = null;
+let lastLoseAnimationRound = 0;
 let currentLang = "ro";
 let currentDeviceMode = "auto";
 let roomCleanupInterval = null;
@@ -119,6 +122,7 @@ const gamePartyCodeEl = document.getElementById("game-party-code");
 const gamePlayersList = document.getElementById("game-players-list");
 const wrongCountSpan = document.getElementById("wrong-count");
 const maxWrongSpan = document.getElementById("max-wrong");
+const hangmanFigure = document.getElementById("hangman-figure");
 const wordDisplay = document.getElementById("word-display");
 const turnInfo = document.getElementById("turn-info");
 
@@ -238,6 +242,10 @@ const I18N = {
     matchmakingError: "A apărut o eroare la matchmaking. Încearcă din nou.",
     youWonWithWord: "Ai câștigat! Felicitări! Cuvântul a fost: \"{word}\".",
     youLostWithWord: "Ai pierdut. Cuvântul a fost: \"{word}\".",
+    youLostSetterTaunt:
+      "Ai pierdut. Încearcă data viitoare un cuvânt mai bun. Cuvântul a fost: \"{word}\".",
+    youLostGuesserTaunt:
+      "Ai pierdut. Încearcă să te gândești mai bine, te ajută să ghicești cuvântul. Cuvântul a fost: \"{word}\".",
     endWordInfo: " Cuvântul a fost: \"{word}\".",
     scoreSingle: "Scor: {p1} {s1}",
     scoreDuel: "Scor: {p1} {s1} - {s2} {p2}",
@@ -346,6 +354,10 @@ const I18N = {
     matchmakingError: "Ошибка подбора. Попробуйте ещё раз.",
     youWonWithWord: "Вы выиграли! Поздравляем! Слово было: \"{word}\".",
     youLostWithWord: "Вы проиграли. Слово было: \"{word}\".",
+    youLostSetterTaunt:
+      "Вы проиграли. В следующий раз придумайте слово получше. Слово было: \"{word}\".",
+    youLostGuesserTaunt:
+      "Вы проиграли. Попробуйте лучше обдумывать буквы, это поможет угадывать слово. Слово было: \"{word}\".",
     endWordInfo: " Слово было: \"{word}\".",
     scoreSingle: "Счёт: {p1} {s1}",
     scoreDuel: "Счёт: {p1} {s1} - {s2} {p2}",
@@ -958,6 +970,27 @@ function startFireworks() {
   }, DEFAULT_NOTIFICATION_MS);
 }
 
+function stopHangmanLoseAnimation() {
+  if (hangmanLoseTimeout) {
+    clearTimeout(hangmanLoseTimeout);
+    hangmanLoseTimeout = null;
+  }
+  hangmanFigure?.classList.remove("break-neck");
+}
+
+function playHangmanLoseAnimation() {
+  if (!hangmanFigure) return;
+
+  stopHangmanLoseAnimation();
+  void hangmanFigure.getBoundingClientRect();
+  hangmanFigure.classList.add("break-neck");
+
+  hangmanLoseTimeout = window.setTimeout(() => {
+    hangmanFigure.classList.remove("break-neck");
+    hangmanLoseTimeout = null;
+  }, LOSE_ANIMATION_MS);
+}
+
 function renderChat(room) {
   if (!chatMessages) return;
   const raw = room.chatMessages || {};
@@ -1314,6 +1347,7 @@ async function createSearchRoomAsHost() {
     resultWinnerId: "",
     resultLoserId: "",
     resultRoundNumber: 0,
+    resultCause: "",
     isPublicSearch: true,
     createdAt: firebase.database.ServerValue.TIMESTAMP,
     expiresAt: computeRoomExpiry(),
@@ -1549,6 +1583,7 @@ function subscribeToRoom(code) {
     syncKeyboard(room);
 
     if (room.state === "playing") {
+      stopHangmanLoseAnimation();
       showScreen(gameScreen);
       showCenterBanner(
         room.roundGuesserId === myId
@@ -1605,7 +1640,28 @@ function subscribeToRoom(code) {
           showScreenNotification(t("youWonWithWord", { word: room.originalWord }), "win");
           startFireworks();
         } else if (room.resultLoserId === myId) {
-          showScreenNotification(t("youLostWithWord", { word: room.originalWord }), "lose");
+          const loseText =
+            room.resultCause === "word_guessed"
+              ? t("youLostSetterTaunt", { word: room.originalWord })
+              : room.resultCause === "max_wrong"
+                ? t("youLostGuesserTaunt", { word: room.originalWord })
+                : t("youLostWithWord", { word: room.originalWord });
+
+          showScreenNotification(
+            loseText,
+            "lose",
+            room.resultCause === "max_wrong" ? LOSE_ANIMATION_MS : DEFAULT_NOTIFICATION_MS
+          );
+
+          if (
+            room.resultCause === "max_wrong" &&
+            resultRound !== lastLoseAnimationRound
+          ) {
+            showScreen(gameScreen);
+            setGameMessage(loseText, "lose");
+            lastLoseAnimationRound = resultRound;
+            playHangmanLoseAnimation();
+          }
         } else {
           showScreenNotification(`${t("roundEnded")}${wordReveal}`);
         }
@@ -1646,6 +1702,7 @@ createPartyBtn.addEventListener("click", async () => {
     resultWinnerId: "",
     resultLoserId: "",
     resultRoundNumber: 0,
+    resultCause: "",
     isPublicSearch: false,
     createdAt: firebase.database.ServerValue.TIMESTAMP,
     expiresAt: computeRoomExpiry(),
@@ -1807,6 +1864,7 @@ startGameBtn.addEventListener("click", async () => {
     resultWinnerId: "",
     resultLoserId: "",
     resultRoundNumber: 0,
+    resultCause: "",
     isPublicSearch: false,
     expiresAt: computeRoomExpiry(),
   });
@@ -1870,6 +1928,7 @@ async function sendGuess(ch) {
     let resultWinnerId = room.resultWinnerId || "";
     let resultLoserId = room.resultLoserId || "";
     let resultRoundNumber = room.resultRoundNumber || 0;
+    let resultCause = room.resultCause || "";
     const scores = {
       ...(room.scores || {}),
     };
@@ -1880,6 +1939,7 @@ async function sendGuess(ch) {
       resultWinnerId = room.roundGuesserId || "";
       resultLoserId = room.roundSetterId || "";
       resultRoundNumber = room.roundNumber || 1;
+      resultCause = "word_guessed";
       if (resultWinnerId) {
         scores[resultWinnerId] = (scores[resultWinnerId] || 0) + 1;
       }
@@ -1889,6 +1949,7 @@ async function sendGuess(ch) {
       resultWinnerId = room.roundSetterId || "";
       resultLoserId = room.roundGuesserId || "";
       resultRoundNumber = room.roundNumber || 1;
+      resultCause = "max_wrong";
       if (resultWinnerId) {
         scores[resultWinnerId] = (scores[resultWinnerId] || 0) + 1;
       }
@@ -1910,6 +1971,7 @@ async function sendGuess(ch) {
       resultWinnerId,
       resultLoserId,
       resultRoundNumber,
+      resultCause,
       scores,
       roundSetterId,
       roundGuesserId,

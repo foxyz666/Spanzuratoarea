@@ -383,6 +383,15 @@ button.small-btn {
   opacity: 1;
 }
 
+#hangman-figure {
+  transform-origin: 140px 78px;
+  transform-box: fill-box;
+}
+
+#hangman-figure.break-neck {
+  animation: hangmanBreakNeck 4.5s ease-in-out forwards;
+}
+
 .word-display {
   min-height: 72px;
   display: flex;
@@ -711,5 +720,26 @@ body.device-mobile #chat-window {
   }
   100% {
     opacity: 0;
+  }
+}
+
+@keyframes hangmanBreakNeck {
+  0% {
+    transform: rotate(0deg) translateY(0);
+  }
+  10% {
+    transform: rotate(3deg) translateY(0);
+  }
+  18% {
+    transform: rotate(-3deg) translateY(0);
+  }
+  26% {
+    transform: rotate(2deg) translateY(0);
+  }
+  36% {
+    transform: rotate(52deg) translateY(6px);
+  }
+  100% {
+    transform: rotate(88deg) translateY(10px);
   }
 }
