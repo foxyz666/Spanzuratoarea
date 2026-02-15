@@ -16,6 +16,7 @@ const db = firebase.database();
 const DEFAULT_NOTIFICATION_MS = 3500;
 const ROOM_TTL_MS = 30 * 60 * 1000;
 const ROOM_CLEANUP_INTERVAL_MS = 90 * 1000;
+const SEARCH_RETRY_INTERVAL_MS = 1800;
 const ADMIN_SECRET_HASH =
   "b6fb730c7661050aaeda0b0e41f7af6a3ac90c02b43ecbabf338b036762791bf";
 
@@ -42,6 +43,8 @@ let searchOwnedRoomCode = null;
 let globalRoomsRef = null;
 let globalRoomsListener = null;
 let searchTimerInterval = null;
+let searchRetryInterval = null;
+let searchRetryInFlight = false;
 let searchStartedAt = 0;
 let lastHandledResultRound = 0;
 let lastBannerKey = "";
@@ -1059,6 +1062,48 @@ function stopSearchTimer() {
   }
 }
 
+function stopSearchRetryLoop() {
+  if (searchRetryInterval) {
+    clearInterval(searchRetryInterval);
+    searchRetryInterval = null;
+  }
+  searchRetryInFlight = false;
+}
+
+function startSearchRetryLoop() {
+  stopSearchRetryLoop();
+
+  searchRetryInterval = setInterval(async () => {
+    if (!searchActive || searchRetryInFlight) return;
+    if (myRole !== "host" || !searchOwnedRoomCode || !myId) return;
+
+    searchRetryInFlight = true;
+    try {
+      const ownRoomSnap = await db.ref("rooms/" + searchOwnedRoomCode).get();
+      const ownRoom = ownRoomSnap.val();
+      if (!searchActive || !ownRoom) return;
+
+      const ownPlayers = ownRoom.players || {};
+      const ownPlayersCount = Object.keys(ownPlayers).length;
+      const iAmStillInOwnRoom = Boolean(ownPlayers[myId]);
+      const canSwitchRoom =
+        iAmStillInOwnRoom &&
+        ownPlayersCount === 1 &&
+        ownRoom.state === "lobby" &&
+        ownRoom.isPublicSearch === true &&
+        !isRoomExpired(ownRoom);
+
+      if (!canSwitchRoom) return;
+
+      await tryJoinWaitingRoom({ excludeCode: searchOwnedRoomCode });
+    } catch {
+      // ignore transient matchmaking loop failures
+    } finally {
+      searchRetryInFlight = false;
+    }
+  }, SEARCH_RETRY_INTERVAL_MS);
+}
+
 function buildKeyboard() {
   keyboard.innerHTML = "";
   const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -1169,6 +1214,7 @@ function resetSearchState() {
   searchActive = false;
   searchOwnedRoomCode = null;
   stopSearchTimer();
+  stopSearchRetryLoop();
   setSearchUiActive(false);
 }
 
@@ -1251,14 +1297,15 @@ async function createSearchRoomAsHost() {
   subscribeToRoom(code);
 }
 
-async function tryJoinWaitingRoom() {
+async function tryJoinWaitingRoom({ excludeCode = "" } = {}) {
   const roomsSnap = await db.ref("rooms").get();
   if (!roomsSnap.exists()) return false;
 
   const rooms = roomsSnap.val() || {};
   const candidates = Object.entries(rooms)
     .map(([code, room]) => ({ code, room }))
-    .filter(({ room }) => {
+    .filter(({ code, room }) => {
+      if (excludeCode && code === excludeCode) return false;
       if (!room || room.isPublicSearch !== true) return false;
       if (isRoomExpired(room)) return false;
       if (room.state !== "lobby") return false;
@@ -1273,12 +1320,12 @@ async function tryJoinWaitingRoom() {
   for (const candidate of candidates) {
     const roomRef = db.ref("rooms/" + candidate.code);
     const tx = await roomRef.transaction((room) => {
-      if (!room) return room;
-      if (room.isPublicSearch !== true || room.state !== "lobby") return room;
+      if (!room) return;
+      if (room.isPublicSearch !== true || room.state !== "lobby") return;
 
       const players = room.players || {};
       const playersCount = Object.keys(players).length;
-      if (playersCount !== 1 || players[myId]) return room;
+      if (playersCount !== 1 || players[myId]) return;
 
       const roundSetterId = room.roundSetterId || room.hostId;
 
@@ -1302,16 +1349,18 @@ async function tryJoinWaitingRoom() {
       return room;
     });
 
-    if (!tx.committed) continue;
+    const joinedRoom = tx.snapshot?.val();
+    if (!tx.committed || !joinedRoom?.players?.[myId]) continue;
 
     myRole = "guest";
+    partyCode = candidate.code;
     createPartyPanel.classList.remove("hidden");
     joinPartyPanel.classList.add("hidden");
     partyStatus.textContent = t("connectedOnline");
     onlineSearchStatus.textContent = t("foundPlayer");
     showScreenNotification(t("foundPlayer"), "win");
 
-    await stopOnlineSearch({ removeOwnedRoom: false });
+    await stopOnlineSearch({ removeOwnedRoom: true });
     subscribeToRoom(candidate.code);
     return true;
   }
@@ -1340,6 +1389,9 @@ async function startOnlineSearch() {
     if (joined) return;
 
     await createSearchRoomAsHost();
+    if (searchActive) {
+      startSearchRetryLoop();
+    }
   } catch {
     await stopOnlineSearch();
     partyStatus.textContent = t("matchmakingError");
