@@ -207,7 +207,7 @@ h1 {
 }
 
 #chat-toggle-btn {
-  display: none !important;
+  display: inline-flex;
 }
 
 #auth-open-btn.auth-user-name {

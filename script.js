@@ -1132,8 +1132,17 @@ function setLanguage(lang) {
 function showScreen(screen) {
   [partyScreen, gameScreen].forEach((s) => s.classList.remove("active"));
   screen.classList.add("active");
-  const shouldShowChat = screen === gameScreen;
-  setChatWindowOpen(shouldShowChat);
+
+  const isGameScreen = screen === gameScreen;
+  if (chatToggleBtn) {
+    chatToggleBtn.classList.toggle("hidden", !isGameScreen);
+    chatToggleBtn.setAttribute("aria-hidden", isGameScreen ? "false" : "true");
+    chatToggleBtn.tabIndex = isGameScreen ? 0 : -1;
+  }
+
+  if (!isGameScreen) {
+    setChatWindowOpen(false);
+  }
 }
 
 function randomId() {
