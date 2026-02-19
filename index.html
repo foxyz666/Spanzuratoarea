@@ -10,19 +10,23 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
 </head>
 <body>
-  <div class="lang-switch" aria-label="Language switch">
-    <button id="lang-ro" class="lang-btn" title="Română">🇷🇴</button>
-    <button id="lang-ru" class="lang-btn" title="Русский">🇷🇺</button>
-  </div>
-  <div class="quick-tools" aria-label="Quick tools">
-    <button id="auth-open-btn" class="icon-btn" title="Cont">👤</button>
-    <button id="chat-toggle-btn" class="icon-btn" title="Chat">
-      💬
-      <span id="chat-unread-badge" class="chat-unread-badge hidden">+0</span>
-    </button>
-  </div>
-
   <div class="app">
+    <div class="top-panel">
+      <div class="top-nav-row">
+        <div class="lang-switch" aria-label="Language switch">
+          <button id="lang-ro" class="lang-btn" title="Română">🇷🇴</button>
+          <button id="lang-ru" class="lang-btn" title="Русский">🇷🇺</button>
+        </div>
+        <div class="quick-tools" aria-label="Quick tools">
+          <button id="auth-open-btn" class="icon-btn" title="Cont">👤</button>
+          <button id="chat-toggle-btn" class="icon-btn hidden" title="Chat" aria-hidden="true" tabindex="-1">
+            💬
+            <span id="chat-unread-badge" class="chat-unread-badge hidden">+0</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
     <h1 id="app-title">Spânzurătoarea Online</h1>
 
     <!-- Ecran Party -->
@@ -40,6 +44,7 @@
         <button id="create-party-btn">Create Party</button>
         <button id="join-party-btn" class="secondary">Join Party</button>
         <button id="online-search-btn" class="secondary">Search Online</button>
+        <button id="leave-search-btn" class="secondary hidden">Leave Search</button>
         <button id="reconnect-party-btn" class="secondary hidden">Reconnect</button>
       </div>
       <p id="online-players-live" class="message">Online acum: 0 jucători</p>
@@ -179,6 +184,14 @@
         <span id="admin-secret-label">Scrie codul de admin:</span>
         <input id="admin-secret-input" type="password" placeholder="Cod secret" />
       </label>
+      <div class="profile-settings" aria-label="Setări profil">
+        <span id="ui-scale-label">Scală interfață:</span>
+        <div class="profile-scale-controls">
+          <button id="ui-scale-minus-btn" class="secondary small-btn" type="button" title="Micșorează">−</button>
+          <span id="ui-scale-value" class="profile-scale-value">100%</span>
+          <button id="ui-scale-plus-btn" class="secondary small-btn" type="button" title="Mărește">+</button>
+        </div>
+      </div>
       <div class="auth-actions">
         <button id="auth-register-btn">Înregistrare</button>
         <button id="auth-login-btn" class="secondary">Login</button>

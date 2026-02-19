@@ -18,6 +18,7 @@ const ROOM_TTL_MS = 2 * 60 * 1000;
 const ROOM_CLEANUP_INTERVAL_MS = 20 * 1000;
 const SEARCH_RETRY_INTERVAL_MS = 1800;
 const REJOIN_STORAGE_KEY = "spz_rejoin_state";
+const UI_SCALE_STORAGE_KEY = "spz_ui_scale";
 const ADMIN_SECRET_HASH =
   "b6fb730c7661050aaeda0b0e41f7af6a3ac90c02b43ecbabf338b036762791bf";
 
@@ -57,6 +58,7 @@ let fireworksTimeout = null;
 let fireworksRaf = null;
 let currentLang = "ro";
 let currentDeviceMode = "auto";
+let currentUiScale = 1;
 let roomCleanupInterval = null;
 let lastRoomTtlRefreshAt = 0;
 let currentUser = null;
@@ -81,6 +83,10 @@ const authCloseBtn = document.getElementById("auth-close-btn");
 const authAdminCheckbox = document.getElementById("auth-admin-checkbox");
 const adminSecretWrap = document.getElementById("admin-secret-wrap");
 const authAdminCheckLabel = document.getElementById("auth-admin-check-label");
+const uiScaleLabel = document.getElementById("ui-scale-label");
+const uiScaleMinusBtn = document.getElementById("ui-scale-minus-btn");
+const uiScalePlusBtn = document.getElementById("ui-scale-plus-btn");
+const uiScaleValue = document.getElementById("ui-scale-value");
 const chatToggleBtn = document.getElementById("chat-toggle-btn");
 const chatUnreadBadge = document.getElementById("chat-unread-badge");
 const chatWindow = document.getElementById("chat-window");
@@ -100,6 +106,7 @@ const playerNameInput = document.getElementById("player-name-input");
 const createPartyBtn = document.getElementById("create-party-btn");
 const joinPartyBtn = document.getElementById("join-party-btn");
 const onlineSearchBtn = document.getElementById("online-search-btn");
+const leaveSearchBtn = document.getElementById("leave-search-btn");
 const reconnectPartyBtn = document.getElementById("reconnect-party-btn");
 const cancelSearchBtn = document.getElementById("cancel-search-btn");
 
@@ -163,6 +170,7 @@ const I18N = {
     createParty: "Create Party",
     joinParty: "Join Party",
     searchOnline: "Search Online",
+    leaveSearch: "Leave Search",
     reconnectParty: "Reconnect",
     matchTitle: "Matchmaking Online",
     cancelSearch: "Cancel Search",
@@ -195,6 +203,9 @@ const I18N = {
     authAdminCheckLabel: "Am cod de admin",
     authAdminSecretLabel: "Scrie codul de admin:",
     authAdminSecretPlaceholder: "Cod secret",
+    uiScaleLabel: "Scală interfață:",
+    uiScaleMinusTitle: "Micșorează",
+    uiScalePlusTitle: "Mărește",
     authAdminCodeInvalid: "Codul de admin este invalid.",
     authRegister: "Înregistrare",
     authLogin: "Login",
@@ -284,6 +295,7 @@ const I18N = {
     createParty: "Создать лобби",
     joinParty: "Войти в лобби",
     searchOnline: "Поиск онлайн",
+    leaveSearch: "Выйти из поиска",
     reconnectParty: "Переподключиться",
     matchTitle: "Онлайн подбор",
     cancelSearch: "Отменить поиск",
@@ -316,6 +328,9 @@ const I18N = {
     authAdminCheckLabel: "У меня есть код админа",
     authAdminSecretLabel: "Введите код админа:",
     authAdminSecretPlaceholder: "Секретный код",
+    uiScaleLabel: "Масштаб интерфейса:",
+    uiScaleMinusTitle: "Уменьшить",
+    uiScalePlusTitle: "Увеличить",
     authAdminCodeInvalid: "Неверный код админа.",
     authRegister: "Регистрация",
     authLogin: "Войти",
@@ -993,6 +1008,40 @@ function applyDeviceMode(mode) {
   }
 }
 
+function clampUiScale(value) {
+  return Math.min(1.4, Math.max(0.8, Number(value) || 1));
+}
+
+function updateUiScaleControls() {
+  if (uiScaleValue) {
+    uiScaleValue.textContent = `${Math.round(currentUiScale * 100)}%`;
+  }
+  if (uiScaleMinusBtn) {
+    uiScaleMinusBtn.disabled = currentUiScale <= 0.8;
+  }
+  if (uiScalePlusBtn) {
+    uiScalePlusBtn.disabled = currentUiScale >= 1.4;
+  }
+}
+
+function applyUiScale(scaleValue) {
+  currentUiScale = Number(clampUiScale(scaleValue).toFixed(2));
+  document.body.style.zoom = String(currentUiScale);
+  updateUiScaleControls();
+}
+
+function persistUiScale(scaleValue) {
+  const normalized = Number(clampUiScale(scaleValue).toFixed(2));
+  localStorage.setItem(UI_SCALE_STORAGE_KEY, String(normalized));
+  setCookie(UI_SCALE_STORAGE_KEY, String(normalized));
+}
+
+function stepUiScale(delta) {
+  const nextScale = currentUiScale + delta;
+  applyUiScale(nextScale);
+  persistUiScale(currentUiScale);
+}
+
 function setLanguage(lang) {
   currentLang = lang === "ru" ? "ru" : "ro";
   localStorage.setItem("spz_lang", currentLang);
@@ -1007,6 +1056,7 @@ function setLanguage(lang) {
   createPartyBtn.textContent = t("createParty");
   joinPartyBtn.textContent = t("joinParty");
   onlineSearchBtn.textContent = t("searchOnline");
+  leaveSearchBtn.textContent = t("leaveSearch");
   reconnectPartyBtn.textContent = t("reconnectParty");
   document.getElementById("match-title").textContent = t("matchTitle");
   cancelSearchBtn.textContent = t("cancelSearch");
@@ -1032,6 +1082,9 @@ function setLanguage(lang) {
   document.getElementById("auth-title").textContent = t("authTitle");
   authAdminCheckLabel.textContent = t("authAdminCheckLabel");
   document.getElementById("admin-secret-label").textContent = t("authAdminSecretLabel");
+  uiScaleLabel.textContent = t("uiScaleLabel");
+  uiScaleMinusBtn.title = t("uiScaleMinusTitle");
+  uiScalePlusBtn.title = t("uiScalePlusTitle");
   authRegisterBtn.textContent = t("authRegister");
   authLoginBtn.textContent = t("authLogin");
   authAnonBtn.textContent = t("authAnon");
@@ -1079,6 +1132,8 @@ function setLanguage(lang) {
 function showScreen(screen) {
   [partyScreen, gameScreen].forEach((s) => s.classList.remove("active"));
   screen.classList.add("active");
+  const shouldShowChat = screen === gameScreen;
+  setChatWindowOpen(shouldShowChat);
 }
 
 function randomId() {
@@ -1663,6 +1718,7 @@ function setSearchUiActive(active) {
   onlineSearchBtn.disabled = active;
   createPartyBtn.disabled = active;
   joinPartyBtn.disabled = active;
+  leaveSearchBtn?.classList.toggle("hidden", !active);
   onlineSearchPanel.classList.toggle("hidden", !active);
 }
 
@@ -2182,6 +2238,14 @@ cancelSearchBtn.addEventListener("click", async () => {
   showCenterBanner("");
 });
 
+leaveSearchBtn?.addEventListener("click", async () => {
+  await stopOnlineSearch();
+  onlineSearchPanel.classList.add("hidden");
+  partyStatus.textContent = t("searchStopped");
+  onlineSearchStatus.textContent = t("searchingStart");
+  showCenterBanner("");
+});
+
 reconnectPartyBtn?.addEventListener("click", async () => {
   try {
     if (reconnectTargetCode) {
@@ -2457,6 +2521,14 @@ authLogoutBtn?.addEventListener("click", () => {
   logoutAccount();
 });
 
+uiScaleMinusBtn?.addEventListener("click", () => {
+  stepUiScale(-0.1);
+});
+
+uiScalePlusBtn?.addEventListener("click", () => {
+  stepUiScale(0.1);
+});
+
 adminPeekWordBtn?.addEventListener("click", () => {
   adminPeekEnemyWord();
 });
@@ -2501,6 +2573,13 @@ window.addEventListener("resize", () => {
 function initPreferences() {
   const savedLang = localStorage.getItem("spz_lang") || getCookie("spz_lang") || "ro";
   setLanguage(savedLang);
+
+  const savedUiScaleRaw =
+    localStorage.getItem(UI_SCALE_STORAGE_KEY) || getCookie(UI_SCALE_STORAGE_KEY) || "1";
+  const savedUiScale = Number.parseFloat(savedUiScaleRaw);
+  const initialUiScale = Number.isFinite(savedUiScale) ? savedUiScale : 1;
+  applyUiScale(initialUiScale);
+  persistUiScale(currentUiScale);
 
   try {
     const rawSavedUser = localStorage.getItem("spz_user");

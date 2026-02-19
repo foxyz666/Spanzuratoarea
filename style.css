@@ -19,8 +19,9 @@ body {
   margin: 0;
   min-height: 100vh;
   display: flex;
-  justify-content: center;
-  align-items: stretch;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: center;
   background: radial-gradient(circle at top, #283e51, #0a2342);
   color: var(--text-main);
 }
@@ -57,23 +58,13 @@ body.device-mobile #letter-input {
 
 body.device-mobile h1 {
   font-size: clamp(1.25rem, 5vw, 1.6rem);
-  margin: 6px 56px 12px 8px;
+  margin: 10px 0 12px;
   text-align: left;
 }
 
 body.device-mobile h2 {
   margin-top: 4px;
   font-size: 1.12rem;
-}
-
-body.device-mobile .lang-switch {
-  top: 8px;
-  right: 8px;
-}
-
-body.device-mobile .quick-tools {
-  top: 48px;
-  right: 8px;
 }
 
 body.device-mobile .party-actions {
@@ -146,6 +137,20 @@ body.device-mobile .site-footer {
   padding: 24px 16px 32px;
 }
 
+.top-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.top-nav-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 h1 {
   text-align: center;
   margin-bottom: 16px;
@@ -180,19 +185,11 @@ h1 {
 }
 
 .lang-switch {
-  position: fixed;
-  top: 10px;
-  right: 10px;
-  z-index: 120;
   display: flex;
   gap: 6px;
 }
 
 .quick-tools {
-  position: fixed;
-  top: 52px;
-  right: 10px;
-  z-index: 121;
   display: flex;
   gap: 6px;
 }
@@ -207,6 +204,10 @@ h1 {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+#chat-toggle-btn {
+  display: none !important;
 }
 
 #auth-open-btn.auth-user-name {
@@ -318,6 +319,34 @@ h1 {
 .admin-check-wrap input {
   width: 16px;
   height: 16px;
+}
+
+.profile-settings {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--text-soft);
+  font-size: 0.92rem;
+}
+
+.profile-scale-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.profile-scale-controls .small-btn {
+  margin-left: 0;
+  min-width: 34px;
+}
+
+.profile-scale-value {
+  min-width: 52px;
+  text-align: center;
+  font-weight: 700;
+  color: var(--text-main);
 }
 
 .auth-actions,
@@ -826,6 +855,10 @@ body.device-mobile #chat-window {
   left: 8px;
   width: auto;
   bottom: 8px;
+}
+
+body.device-mobile .top-nav-row {
+  align-items: flex-start;
 }
 
 body.device-mobile .admin-tools {
